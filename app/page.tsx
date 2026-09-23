@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Box from "@mui/material/Box";
 import { styled } from "@mui/material/styles";
 import ChatMessages from "./components/ChatMessages";
 import ChatInput from "./components/ChatInput";
+import { createRequestSession, isAbortError } from "./lib/chatRequest";
 import { Message } from "./type";
 import Sidebar, { COLLAPSED_WIDTH, EXPANDED_WIDTH } from "./components/Sidebar";
 
@@ -21,16 +22,24 @@ export default function Home() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [sidebarExpanded, setSidebarExpanded] = useState(true);
-
+  const sessionRef = useRef(createRequestSession());
+  const abortRef = useRef<AbortController | null>(null);
 
   const handleNewChat = () => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    sessionRef.current.cancel();
     setMessages([]);
     setInput("");
+    setIsLoading(false);
   };
 
   const handleFormSubmit = async (e: any) => {
     e.preventDefault();
-    if (!input.trim() || isLoading) return;
+    if (!input.trim()) return;
+
+    const requestId = sessionRef.current.begin();
+    if (requestId == null) return;
 
     const userMsg: Message = { id: Date.now().toString(), role: "user", content: input };
     const newMessages = [...messages, userMsg];
@@ -41,11 +50,15 @@ export default function Home() {
     const assistantId = (Date.now() + 1).toString();
     setMessages((prev) => [...prev, { id: assistantId, role: "assistant", content: "" }]);
 
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     try {
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ messages: newMessages.map(({ role, content }) => ({ role, content })) }),
+        signal: controller.signal,
       });
 
       if (!response.ok || !response.body) throw new Error(`Request failed: ${response.status}`);
@@ -55,15 +68,22 @@ export default function Home() {
 
       for await (const chunk of response.body as any) {
         accumulated += decoder.decode(chunk, { stream: true });
+        if (!sessionRef.current.isCurrent(requestId)) return;
         setMessages((prev) => prev.map((m) => (m.id === assistantId ? { ...m, content: accumulated } : m)));
       }
     } catch (error) {
+      if (isAbortError(error)) return;
       console.error("Chat error:", error);
+      if (!sessionRef.current.isCurrent(requestId)) return;
       setMessages((prev) =>
         prev.map((m) => (m.id === assistantId ? { ...m, content: "Something went wrong." } : m))
       );
     } finally {
-      setIsLoading(false);
+      sessionRef.current.end(requestId);
+      if (sessionRef.current.isCurrent(requestId)) {
+        setIsLoading(false);
+        abortRef.current = null;
+      }
     }
   };
 
@@ -82,7 +102,7 @@ export default function Home() {
         }}
       >
         <ChatMessages messages={messages} isLoading={isLoading} />
-        <ChatInput value={input} onChange={setInput} onSubmit={handleFormSubmit} disabled={!input ||isLoading} />
+        <ChatInput value={input} onChange={setInput} onSubmit={handleFormSubmit} disabled={!input.trim() || isLoading} />
       </PageContainer>
     </Box>
   );

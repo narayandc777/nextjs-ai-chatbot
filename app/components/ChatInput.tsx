@@ -4,6 +4,7 @@ import { styled } from "@mui/material/styles";
 import TextField from "@mui/material/TextField";
 import IconButton from "@mui/material/IconButton";
 import SendIcon from "@mui/icons-material/Send";
+import { shouldSubmitOnEnter } from "../lib/chatRequest";
 
 const InputForm = styled("form")({
   width: "100%",
@@ -41,6 +42,7 @@ export default function ChatInput({ value, onChange, onSubmit, disabled }: ChatI
         onKeyDown={(e) => {
           if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
+            if (!shouldSubmitOnEnter(e, disabled)) return;
             onSubmit(e);
           }
         }}
