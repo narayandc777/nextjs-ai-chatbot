@@ -60,7 +60,7 @@ export default function Home() {
     } catch (error) {
       console.error("Chat error:", error);
       setMessages((prev) =>
-        prev.map((m) => (m.id === assistantId ? { ...m, content: "⚠️ Something went wrong." } : m))
+        prev.map((m) => (m.id === assistantId ? { ...m, content: "Something went wrong." } : m))
       );
     } finally {
       setIsLoading(false);

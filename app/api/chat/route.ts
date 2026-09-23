@@ -17,7 +17,7 @@ export async function POST(req: Request) {
       messages,
     });
 
-     // ✅ current API (result.toTextStreamResponse() is deprecated as of AI SDK v7)
+     // current API (result.toTextStreamResponse() is deprecated as of AI SDK v7)
     return createTextStreamResponse({
       stream: toTextStream({ stream: result.stream }),
     });
